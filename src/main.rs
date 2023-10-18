@@ -1,23 +1,20 @@
-use actix_files::{Files, NamedFile};
+use actix_files::NamedFile;
 use push_service::{push_message_request, PushSubscription, PushSubscriptionOptions};
-use serde::{Deserialize, Serialize};
+
 use std::{
     collections::HashMap,
     fs::File,
     io::{BufReader, BufWriter, Write},
     path::PathBuf,
-    sync::{Arc, Mutex, RwLock},
+    sync::{Arc, Mutex},
     thread,
 };
-use web_push_native::jwt_simple::prelude::{
-    ECDSAP256KeyPairLike, ES256KeyPair, ES256PublicKey, P256KeyPair, P256PublicKey,
-};
+use web_push_native::jwt_simple::prelude::{ECDSAP256KeyPairLike, ES256KeyPair, P256PublicKey};
 //
 
 use actix_cors::Cors;
 use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result};
 use base64ct::{Base64UrlUnpadded, Encoding};
-use once_cell::sync::Lazy;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys};
 
@@ -29,10 +26,6 @@ async fn hello() -> impl Responder {
 #[get("/pkey")]
 async fn get_public_key(data: web::Data<KeysState>) -> impl Responder {
     let pub_key = data.pub_key.to_bytes_uncompressed();
-    // let pub_key = VAPID_PRIVATE
-    //     .key_pair()
-    //     .public_key()
-    //     .to_bytes_uncompressed();
 
     return HttpResponse::Ok().body(pub_key);
 }
@@ -46,9 +39,7 @@ async fn send_push(notif_state: web::Data<PushSubscription>) -> impl Responder {
 }
 
 #[post("/subscribe")]
-async fn subscribe(
-    data: web::Data<KeysState>,
-    json: web::Json<PushSubscription>,
+async fn subscribe(// json: web::Json<PushSubscription>,
 ) -> impl Responder {
     HttpResponse::Ok().body("Hello world!")
 }
@@ -123,20 +114,13 @@ fn lookup_keys() -> P256PublicKey {
                     return ();
                 }
                 None => {
-                    println!("Generating new keys");
-                    let  sec_key = generate_keys();
+                    let sec_key = generate_keys();
                     let file = File::create("vapid/private.key")
                         .expect("Could not create private key file");
 
                     let mut writer = BufWriter::new(&file);
 
-                    let key =
-                        sec_key.to_bytes();
-                    println!("key length: {:?}", key.len());
-                    println!("key: {:?}", key);
-
-                    // let string = "RS0WdYWWo1HajXg3NZR1olzCf31i-ZBGDkFyCs7j1jw".as_bytes();
-                    // println!("string: {:?}", string);
+                    let key = sec_key.to_bytes();
 
                     writer
                         .write_all(&key)
@@ -161,12 +145,8 @@ fn lookup_keys() -> P256PublicKey {
 
     let secret_key = ES256KeyPair::from_bytes(&private_key).expect("coould not get key pair");
     let string_key = Base64UrlUnpadded::encode_string(private_key.as_slice());
-    println!("string_key: {:?}", string_key);
 
-    std::env::set_var("VAPID_PRIVATE", string_key.as_str()) ;
-
-
-
+    std::env::set_var("VAPID_PRIVATE", string_key.as_str());
 
     let pub_key = secret_key.key_pair().public_key();
 
@@ -195,7 +175,6 @@ fn remove_pem_headers(pem_string: &str) -> String {
 
     result
 }
-
 
 fn load_rustls_config() -> rustls::ServerConfig {
     // init server config builder with safe defaults
