@@ -1,5 +1,5 @@
 use actix_files::NamedFile;
-use push_service::{push_message_request, PushSubscription, PushSubscriptionOptions};
+use push_service::{push_message_request, PushSubscription, PushSubscriptionOptions, error::CustomError};
 
 use std::{
     collections::HashMap,
@@ -13,10 +13,12 @@ use web_push_native::jwt_simple::prelude::{ECDSAP256KeyPairLike, ES256KeyPair, P
 //
 
 use actix_cors::Cors;
-use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result};
+use actix_web::Error;
+use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result, error::HttpError};
 use base64ct::{Base64UrlUnpadded, Encoding};
 use rustls::{Certificate, PrivateKey, ServerConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys};
+use rustls_pemfile::{certs, pkcs8_private_keys}; 
+
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -31,11 +33,11 @@ async fn get_public_key(data: web::Data<KeysState>) -> impl Responder {
 }
 
 #[get("/send_push")]
-async fn send_push(notif_state: web::Data<PushSubscription>) -> impl Responder {
+async fn send_push(notif_state: web::Data<PushSubscription>) ->Result<impl Responder, Error> {
     println!("notif_state: {:?}", notif_state);
-    push_message_request(notif_state).await;
+    push_message_request(notif_state).await?;
 
-    return HttpResponse::Ok().body("Hello world!");
+    return Ok(HttpResponse::Ok().body("Hello world!"));
 }
 
 #[post("/subscribe")]
@@ -51,14 +53,14 @@ pub struct KeysState {
 }
 
 async fn static_file(req: HttpRequest) -> Result<NamedFile> {
-    let path: PathBuf = req.match_info().query("filename").parse().unwrap();
+    let path: PathBuf = req.match_info().query("filename").parse()?;
     Ok(NamedFile::open(path)?)
 }
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     let config = load_rustls_config();
-    let pub_key = lookup_keys();
+    let pub_key = lookup_keys().expect("have vapid keys");
 
     HttpServer::new(move || {
         let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header();
@@ -99,18 +101,19 @@ async fn main() -> std::io::Result<()> {
 
 use std::io::prelude::*;
 /// Lookup keys if there are vapid keys in the file system and if not it will generate them
-fn lookup_keys() -> P256PublicKey {
+fn lookup_keys() -> Result<P256PublicKey, CustomError> {
+
     let privkey_mutex: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+
     thread::scope(|s| {
         let priv_key = privkey_mutex.clone();
 
         let handle = thread::spawn(move || {
-            let mut private_key = priv_key.lock().unwrap();
+            let mut private_key = priv_key.lock().expect("Could not lock private key");
             match File::open("vapid/private.key").ok() {
                 Some(mut file_t) => {
                     file_t
-                        .read_to_end(&mut private_key)
-                        .expect("Could not read private key file");
+                        .read_to_end(&mut private_key).expect("Could not read private key file");
                     return ();
                 }
                 None => {
@@ -150,31 +153,9 @@ fn lookup_keys() -> P256PublicKey {
 
     let pub_key = secret_key.key_pair().public_key();
 
-    pub_key
+    return Ok(pub_key);
 }
 
-fn remove_pem_headers(pem_string: &str) -> String {
-    let lines: Vec<&str> = pem_string.lines().collect();
-    let mut result = String::new();
-
-    let mut in_pem_section = false;
-    for line in lines {
-        if line.starts_with("-----BEGIN PRIVATE KEY-----") {
-            in_pem_section = true;
-            continue;
-        } else if line.starts_with("-----END PRIVATE KEY-----") {
-            in_pem_section = false;
-            continue;
-        }
-
-        if !in_pem_section {
-            result.push_str(line);
-            result.push('\n');
-        }
-    }
-
-    result
-}
 
 fn load_rustls_config() -> rustls::ServerConfig {
     // init server config builder with safe defaults
@@ -204,7 +185,7 @@ fn load_rustls_config() -> rustls::ServerConfig {
         std::process::exit(1);
     }
 
-    config.with_single_cert(cert_chain, keys.remove(0)).unwrap()
+    return config.with_single_cert(cert_chain, keys.remove(0)).expect("Could not load cert");
 }
 
 fn generate_keys() -> ES256KeyPair {
