@@ -40,7 +40,10 @@ navigator.serviceWorker.ready.then(async function(registration) {
 
 
 /** @type {HTMLInputElement} */
-let input = document.querySelector("input[name='general_notif']");
+let general_notif_input = document.querySelector("input[name='general_notif']");
+
+/** @type {HTMLInputElement} */
+let back_stock_input = document.querySelector("input[name='back_stock']");
 
 
 /** @type {HTMLButtonElement} */
@@ -48,19 +51,23 @@ let form = document.querySelector("form");
 
 form.addEventListener("submit", async function(event) {
     event.preventDefault();
-    let values = {};
+    const activeNotifs = [];
 
     form.querySelectorAll("input").forEach(function(input) {
-        console.log({input: input.value});
-        values[input.name] = input.value;
+        if (input.value==="on") {
+            activeNotifs.push(input.name);
+
+        }
     });
+    console.log({activeNotifs});
 
     let result = await Notification.requestPermission();
-    console.log({result});
+
+    // subscriptionPush.action_condition = activeNotifs;
 
     console.log({subscriptionPush});
 
-    let res = await fetch('/subscribe', {method: 'POST', body: JSON.stringify(subscriptionPush), headers: {'Content-Type': 'application/json'}});
+    let res = await fetch('/subscribe', {method: 'POST', body: JSON.stringify({subscription_push: subscriptionPush, action_condition: activeNotifs}), headers: {'Content-Type': 'application/json'}});
     console.log({res});
 
     // let res = await fetch("https://localhost:3000/"); let data = await res.json();

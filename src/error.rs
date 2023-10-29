@@ -31,9 +31,11 @@ pub enum CustomError {
 
 impl ResponseError for CustomError {
     fn status_code(&self) -> actix_web::http::StatusCode {
+        println!("error: {:?}", self);
         actix_web::http::StatusCode::INTERNAL_SERVER_ERROR
     }
     fn error_response(&self) -> actix_web::HttpResponse {
+        println!("error: {:?}", self);
         return HttpResponse::InternalServerError().json("Internal Server Error");
     }
 }

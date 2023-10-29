@@ -1,5 +1,6 @@
 use actix_files::NamedFile;
-use push_service::{push_message_request, PushSubscription, PushSubscriptionOptions, error::CustomError};
+use push_service::{push_message_request, Subscription, SubscriptionOptions, error::CustomError, db::{Pool, insert_subscription, get_subscription_by_action_condition}, load_rustls_config, lookup_keys, SubscriptionBody};
+use r2d2_sqlite::SqliteConnectionManager;
 
 use std::{
     collections::HashMap,
@@ -9,16 +10,13 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
-use web_push_native::jwt_simple::prelude::{ECDSAP256KeyPairLike, ES256KeyPair, P256PublicKey};
 //
 
 use actix_cors::Cors;
-use actix_web::Error;
+use actix_web::{Error, web::Query};
 use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result, error::HttpError};
-use base64ct::{Base64UrlUnpadded, Encoding};
-use rustls::{Certificate, PrivateKey, ServerConfig};
-use rustls_pemfile::{certs, pkcs8_private_keys}; 
-
+use web_push_native::jwt_simple::prelude::P256PublicKey;
+use serde::Deserialize;
 
 #[get("/")]
 async fn hello() -> impl Responder {
@@ -32,24 +30,33 @@ async fn get_public_key(data: web::Data<KeysState>) -> impl Responder {
     return HttpResponse::Ok().body(pub_key);
 }
 
-#[get("/send_push")]
-async fn send_push(notif_state: web::Data<PushSubscription>) ->Result<impl Responder, Error> {
-    println!("notif_state: {:?}", notif_state);
-    push_message_request(notif_state).await?;
+#[derive(Deserialize, Debug)]
+struct PushQuery {
+    action: String,
+}
 
-    return Ok(HttpResponse::Ok().body("Hello world!"));
+#[get("/send_push")]
+async fn send_push(query: Query<PushQuery>, db: web::Data<Pool> ) ->Result<impl Responder, Error> {
+    let subs: Vec<Subscription> = get_subscription_by_action_condition(&db, &query.action);
+
+    for sub in subs.iter() {
+        push_message_request(sub).await?;
+    }
+
+    return Ok(HttpResponse::Ok().json("Hello world!"));
 }
 
 #[post("/subscribe")]
-async fn subscribe(// json: web::Json<PushSubscription>,
+async fn subscribe(db: web::Data<Pool>,  json: web::Json<SubscriptionBody>,
 ) -> impl Responder {
+    println!("subscribe: {:?}", json);
+    let insert = insert_subscription(&db, json.clone());
     HttpResponse::Ok().body("Hello world!")
 }
 
 #[derive(Clone, Debug)]
 pub struct KeysState {
     pub pub_key: P256PublicKey,
-    // pub sec_key: &ES256KeyPair,
 }
 
 async fn static_file(req: HttpRequest) -> Result<NamedFile> {
@@ -68,26 +75,18 @@ async fn main() -> std::io::Result<()> {
         let state_keys = web::Data::new(KeysState {
             pub_key: pub_key.clone(),
         });
-        let mut notifications: Mutex<HashMap<String, PushSubscription>> =Mutex::new(HashMap::new());
+        let mut notifications: Mutex<HashMap<String, Subscription>> =Mutex::new(HashMap::new());
 
         let mut notifications_state = web::Data::new(notifications);
+         // connect to SQLite DB
+        let manager = SqliteConnectionManager::file("notifs.db");
+        let pool = Pool::new(manager).unwrap();
 
-        let notif_option = PushSubscriptionOptions {
-                p256dh: "BNmRp61O5ZaGfT5k5Q5BKUpkF6Xw4P6NTg2RXVgvd_diFi3x86g2gf0BfbgfRKj5HFRBpL5nmxdnCBSKGd5yCt4".to_string(),
-                auth: "5GfkRaNKByyjRwOEkFscpA".to_string(),
-        };
-        let sub = PushSubscription {
-            endpoint: "https://fcm.googleapis.com/fcm/send/fWexfx6siI0:APA91bHN78EZEb30KJPZiymNuZeTrE0MPAGI7KS5QHvX0dzE1Iyiz_EUeqDxFzswQhO83ge7jI0IV3z5KpeWFpuN-7ru0JHB85wmzL6WnUKLp1gYyBo0CDIrYeIcYYyJH_hnjcWpfivI".to_string(),
-            expirationTime: None,
-            keys: notif_option
-        };
-
-        let notif = web::Data::new(sub);
 
         App::new()
             .wrap(cors)
+            .app_data(web::Data::new(pool.clone()))
             .app_data(state_keys.clone())
-            .app_data(notif)
             .service(hello)
             .service(subscribe)
             .service(get_public_key)
@@ -99,97 +98,4 @@ async fn main() -> std::io::Result<()> {
     .await
 }
 
-use std::io::prelude::*;
-/// Lookup keys if there are vapid keys in the file system and if not it will generate them
-fn lookup_keys() -> Result<P256PublicKey, CustomError> {
 
-    let privkey_mutex: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
-
-    thread::scope(|s| {
-        let priv_key = privkey_mutex.clone();
-
-        let handle = thread::spawn(move || {
-            let mut private_key = priv_key.lock().expect("Could not lock private key");
-            match File::open("vapid/private.key").ok() {
-                Some(mut file_t) => {
-                    file_t
-                        .read_to_end(&mut private_key).expect("Could not read private key file");
-                    return ();
-                }
-                None => {
-                    let sec_key = generate_keys();
-                    let file = File::create("vapid/private.key")
-                        .expect("Could not create private key file");
-
-                    let mut writer = BufWriter::new(&file);
-
-                    let key = sec_key.to_bytes();
-
-                    writer
-                        .write_all(&key)
-                        .expect("Could not write private key file");
-                    writer.flush().expect("Could not flush private key file");
-
-                    let mut file2 =
-                        File::open("vapid/private.key").expect("Could not open private key file");
-                    file2
-                        .read_to_end(&mut private_key)
-                        .expect("Could not read private key file 2");
-
-                    return ();
-                }
-            };
-        });
-
-        handle.join().unwrap();
-    });
-
-    let private_key = privkey_mutex.lock().expect("Could not lock private key");
-
-    let secret_key = ES256KeyPair::from_bytes(&private_key).expect("coould not get key pair");
-    let string_key = Base64UrlUnpadded::encode_string(private_key.as_slice());
-
-    std::env::set_var("VAPID_PRIVATE", string_key.as_str());
-
-    let pub_key = secret_key.key_pair().public_key();
-
-    return Ok(pub_key);
-}
-
-
-fn load_rustls_config() -> rustls::ServerConfig {
-    // init server config builder with safe defaults
-    let config = ServerConfig::builder()
-        .with_safe_defaults()
-        .with_no_client_auth();
-
-    // load TLS key/cert files
-    let cert_file = &mut BufReader::new(File::open("cert.pem").unwrap());
-    let key_file = &mut BufReader::new(File::open("key.pem").unwrap());
-
-    // convert files to key/cert objects
-    let cert_chain = certs(cert_file)
-        .unwrap()
-        .into_iter()
-        .map(Certificate)
-        .collect();
-    let mut keys: Vec<PrivateKey> = pkcs8_private_keys(key_file)
-        .unwrap()
-        .into_iter()
-        .map(PrivateKey)
-        .collect();
-
-    // exit if no keys could be parsed
-    if keys.is_empty() {
-        eprintln!("Could not locate PKCS 8 private keys.");
-        std::process::exit(1);
-    }
-
-    return config.with_single_cert(cert_chain, keys.remove(0)).expect("Could not load cert");
-}
-
-fn generate_keys() -> ES256KeyPair {
-    let keypair = ES256KeyPair::generate();
-
-    return keypair;
-}
