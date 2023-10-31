@@ -1,1 +1,5 @@
 /target
+cert.pem
+key.pem
+notifs.db
+private.key
