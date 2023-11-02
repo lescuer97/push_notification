@@ -10,31 +10,28 @@ pub fn insert_subscription(pool: &Pool, subs: SubscriptionBody) -> usize {
     let conn = pool.get().unwrap();
 
     let mut stmt = conn.prepare("
-                                INSERT INTO subscription (id, endpoint, auth_key, p256, expiration_time, subscribed) VALUES (?1, ?2, ?3, ?4, ?5, ?6 )
-
+                                INSERT INTO subscription (id, endpoint, auth_key, p256, expiration_time, subscribed, action_condition) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                                 ").unwrap();
+    // let notification_id = Uuid::new_v4().to_string();
 
+    for action in subs.action_condition.iter() {
     let subscription_id = Uuid::new_v4().to_string();
-    let notification_id = Uuid::new_v4().to_string();
+        let result = stmt
+            .execute((
+                &subscription_id,
+                &subs.subscription_push.endpoint,
+                &subs.subscription_push.keys.auth,
+                &subs.subscription_push.keys.p256dh,
+                &subs.subscription_push.expirationTime,
+                1,
+                action,
+            ))
+            .unwrap();
+    }
 
-    let result = stmt
-        .execute((
-            &subscription_id,
-            &subs.subscription_push.endpoint,
-            &subs.subscription_push.keys.auth,
-            &subs.subscription_push.keys.p256dh,
-            &subs.subscription_push.expirationTime,
-            1,
-        ))
-        .unwrap();
-    insert_notification_array(
-        pool,
-        subs.action_condition,
-        &notification_id,
-        &subscription_id,
-    );
+    return 0;
 
-    result
+    // result
 }
 
 fn insert_notification_array(
@@ -64,7 +61,7 @@ pub fn get_subscription_by_action_condition(
 ) -> Vec<Subscription> {
     let conn = pool.get().unwrap();
 
-    let mut stmt = conn.prepare("SELECT endpoint, auth_key, p256, expiration_time  FROM subscription WHERE id IN (SELECT subscription FROM notification WHERE action_condition = ?1) AND subscribed = 1").unwrap();
+    let mut stmt = conn.prepare("SELECT endpoint, auth_key, p256, expiration_time  FROM subscription WHERE  action_condition = ?1 AND subscribed = 1").unwrap();
 
     let mut rows = stmt
         .query_map([action_condition], |row| {
