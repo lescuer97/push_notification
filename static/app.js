@@ -32,15 +32,8 @@ navigator.serviceWorker.ready.then(async function(registration) {
 
 }).then( async function(subscription) {
     subscriptionPush = subscription;
-
-    console.log({subsafter: subscription});
-    
-
-
+    });
 });
-});
-
-
 
 
 /** @type {HTMLInputElement} */
@@ -58,7 +51,7 @@ form.addEventListener("submit", async function(event) {
     const activeNotifs = [];
 
     form.querySelectorAll("input").forEach(function(input) {
-        if (input.value==="on") {
+        if (input.value === "on") {
             activeNotifs.push(input.name);
 
         }
@@ -67,17 +60,10 @@ form.addEventListener("submit", async function(event) {
 
     let result = await Notification.requestPermission();
 
-    // subscriptionPush.action_condition = activeNotifs;
-
     console.log({subscriptionPush});
 
     let res = await fetch('/subscribe', {method: 'POST', body: JSON.stringify({subscription_push: subscriptionPush, action_condition: activeNotifs}), headers: {'Content-Type': 'application/json'}});
     console.log({res});
-
-    // let res = await fetch("https://localhost:3000/"); let data = await res.json();
-
-    // console.log({data});
-
 });
 
 let cancel = document.getElementById("unsubscribe");
@@ -85,13 +71,11 @@ let cancel = document.getElementById("unsubscribe");
 cancel.addEventListener("click", async function(event) {
     event.preventDefault();
 
-
     subscriptionPush.unsubscribe().then(function(successful) { 
         console.log({successful});
     }).catch(function(e) {
         console.log({e});
     });
-
 
 });
 

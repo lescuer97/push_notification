@@ -3,6 +3,7 @@
 This is an experimental server on how to handle push notifications. It will just simply handle a subscription request and in the case a notification condition happens(just a simple http call in this case) send a push notification to the different browsers.
 
 ### Development 
+
  
 #### Set up the DB
 
@@ -28,6 +29,11 @@ bash db/setup-db.sh
 cargo run
 
 ```
+#### Making localhost workwith Https
+
+You will also need a valid https cert on your browser for things to work correctly. 
+I recomment following this tutorial that uses mkcert: https://web.dev/articles/how-to-use-local-https
+
 #### Register a  web push notification 
 
 Visit the website: https://localhost:3000/static/index.html.
