@@ -1,5 +1,10 @@
 use actix_files::NamedFile;
-use push_service::{push_message_request, Subscription, SubscriptionOptions, error::CustomError, db::{Pool, insert_subscription, get_subscription_by_action_condition}, load_rustls_config, lookup_keys, SubscriptionBody};
+use push_service::{
+    db::{get_subscription_by_action_condition, insert_subscription, Pool},
+    error::CustomError,
+    load_rustls_config, lookup_keys, push_message_request, Subscription, SubscriptionBody,
+    SubscriptionOptions,
+};
 use r2d2_sqlite::SqliteConnectionManager;
 
 use std::{
@@ -13,16 +18,19 @@ use std::{
 //
 
 use actix_cors::Cors;
-use actix_web::{Error, web::Query};
-use actix_web::{get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result, error::HttpError};
-use web_push_native::jwt_simple::prelude::P256PublicKey;
+use actix_web::{
+    error::HttpError, get, post, web, App, HttpRequest, HttpResponse, HttpServer, Responder, Result,
+};
+use actix_web::{web::Query, Error};
 use serde::Deserialize;
+use web_push_native::jwt_simple::prelude::P256PublicKey;
 
 #[get("/")]
 async fn hello() -> impl Responder {
     HttpResponse::Ok().json("Hello world!")
 }
 
+/// Send uncompressed public key to the client, for encripted coms for the push notification.
 #[get("/pkey")]
 async fn get_public_key(data: web::Data<KeysState>) -> impl Responder {
     let pub_key = data.pub_key.to_bytes_uncompressed();
@@ -35,20 +43,21 @@ struct PushQuery {
     action: String,
 }
 
+/// check for the type of query on the url and send to the respective subscribers.
 #[get("/send_push")]
-async fn send_push(query: Query<PushQuery>, db: web::Data<Pool> ) ->Result<impl Responder, Error> {
+async fn send_push(query: Query<PushQuery>, db: web::Data<Pool>) -> Result<impl Responder, Error> {
     let subs: Vec<Subscription> = get_subscription_by_action_condition(&db, &query.action);
 
     for sub in subs.iter() {
-        push_message_request(sub).await?;
+        push_message_request(sub, &db).await?;
     }
 
     return Ok(HttpResponse::Ok().json("Hello world!"));
 }
 
+/// Register a new public key subscription.
 #[post("/subscribe")]
-async fn subscribe(db: web::Data<Pool>,  json: web::Json<SubscriptionBody>,
-) -> impl Responder {
+async fn subscribe(db: web::Data<Pool>, json: web::Json<SubscriptionBody>) -> impl Responder {
     println!("subscribe: {:?}", json);
     let insert = insert_subscription(&db, json.clone());
     HttpResponse::Ok().body("Hello world!")
@@ -59,6 +68,7 @@ pub struct KeysState {
     pub pub_key: P256PublicKey,
 }
 
+/// send the static files for the basic html website.
 async fn static_file(req: HttpRequest) -> Result<NamedFile> {
     let path: PathBuf = req.match_info().query("filename").parse()?;
     Ok(NamedFile::open(path)?)
@@ -70,18 +80,21 @@ async fn main() -> std::io::Result<()> {
     let pub_key = lookup_keys().expect("have vapid keys");
 
     HttpServer::new(move || {
-        let cors = Cors::default().allow_any_origin().allow_any_method().allow_any_header();
+        let cors = Cors::default()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header();
 
         let state_keys = web::Data::new(KeysState {
             pub_key: pub_key.clone(),
         });
-        let mut notifications: Mutex<HashMap<String, Subscription>> =Mutex::new(HashMap::new());
+        let mut notifications: Mutex<HashMap<String, Subscription>> = Mutex::new(HashMap::new());
 
         let mut notifications_state = web::Data::new(notifications);
-         // connect to SQLite DB
+
+        // connect to SQLite DB
         let manager = SqliteConnectionManager::file("notifs.db");
         let pool = Pool::new(manager).unwrap();
-
 
         App::new()
             .wrap(cors)
@@ -97,5 +110,3 @@ async fn main() -> std::io::Result<()> {
     .run()
     .await
 }
-
-

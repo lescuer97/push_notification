@@ -1,7 +1,8 @@
 use actix_web::Result;
 use base64ct::{Base64UrlUnpadded, Encoding};
+use db::Pool;
 use error::CustomError;
-use hyper::{Body, Client, Response};
+use hyper::{Body, Client, Response, StatusCode};
 use hyper_rustls::HttpsConnectorBuilder;
 use rustls::{Certificate, PrivateKey, ServerConfig};
 use rustls_pemfile::{certs, pkcs8_private_keys};
@@ -18,6 +19,8 @@ use std::{
     sync::{Arc, Mutex},
     thread,
 };
+
+use crate::db::switch_subscription_status;
 
 pub mod db;
 pub mod error;
@@ -48,7 +51,7 @@ pub struct SubscriptionBody {
     pub action_condition: Vec<String>,
 }
 
-pub async fn push_message_request(post: &Subscription) -> Result<(), CustomError> {
+pub async fn push_message_request(post: &Subscription, pool: &Pool) -> Result<(), CustomError> {
     let vapid_env = std::env::var("VAPID_PRIVATE")?;
 
     let bytes = Base64UrlUnpadded::decode_vec(vapid_env.as_str())?;
@@ -79,6 +82,16 @@ pub async fn push_message_request(post: &Subscription) -> Result<(), CustomError
     let req = builder.build(value.to_string())?.map(|body| body.into());
 
     let res = client.request(req).await?;
+
+    println!("code : {}", &res.status());
+
+    if &res.status() == &StatusCode::GONE {
+        switch_subscription_status(pool, &post.endpoint);
+    };
+
+    let body = body_to_string(res).await?;
+
+    println!("body: {}", body);
 
     return Ok(());
 }

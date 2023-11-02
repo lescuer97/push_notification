@@ -7,6 +7,8 @@
       console.error('Error registering Service Worker:', error);
     });
 
+
+/** @type {PushSubscription} */
 let subscriptionPush = null;
 
 navigator.serviceWorker.ready.then(async function(registration) {
@@ -37,6 +39,8 @@ navigator.serviceWorker.ready.then(async function(registration) {
 
 });
 });
+
+
 
 
 /** @type {HTMLInputElement} */
@@ -74,8 +78,21 @@ form.addEventListener("submit", async function(event) {
 
     // console.log({data});
 
+});
 
-    console.log("Submit button clicked!");
+let cancel = document.getElementById("unsubscribe");
+
+cancel.addEventListener("click", async function(event) {
+    event.preventDefault();
+
+
+    subscriptionPush.unsubscribe().then(function(successful) { 
+        console.log({successful});
+    }).catch(function(e) {
+        console.log({e});
+    });
+
+
 });
 
      

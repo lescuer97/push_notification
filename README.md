@@ -27,7 +27,20 @@ bash db/setup-db.sh
 # start the server 
 cargo run
 
-
 ```
+#### Register a  web push notification 
+
+Visit the website: https://localhost:3000/static/index.html.
+
+There is a form there where when you can select to which event to subscribe and then click the button to create a new subscription and send it to the server.
+
+You might need to approve notifications the first time.
+
+
+#### Triggering a http notification
+Just visit the the url https://localhost:3000/send_push and add a query for the action that you want.  ex: https://localhost:3000/send_push?action=general_notif
+
+Right now the only two triggering actions available are: general_notif and back_stock
+
 
 
