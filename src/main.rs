@@ -46,7 +46,7 @@ struct PushQuery {
 /// check for the type of query on the url and send to the respective subscribers.
 #[get("/send_push")]
 async fn send_push(query: Query<PushQuery>, db: web::Data<Pool>) -> Result<impl Responder, Error> {
-    let subs: Vec<Subscription> = get_subscription_by_action_condition(&db, &query.action);
+    let subs: Vec<Subscription> = get_subscription_by_action_condition(&db, &query.action)?;
 
     for sub in subs.iter() {
         push_message_request(sub, &db).await?;
@@ -57,10 +57,13 @@ async fn send_push(query: Query<PushQuery>, db: web::Data<Pool>) -> Result<impl 
 
 /// Register a new public key subscription.
 #[post("/subscribe")]
-async fn subscribe(db: web::Data<Pool>, json: web::Json<SubscriptionBody>) -> impl Responder {
+async fn subscribe(
+    db: web::Data<Pool>,
+    json: web::Json<SubscriptionBody>,
+) -> Result<impl Responder, Error> {
     println!("subscribe: {:?}", json);
-    let insert = insert_subscription(&db, json.clone());
-    HttpResponse::Ok().body("Hello world!")
+    let insert = insert_subscription(&db, json.clone())?;
+    Ok(HttpResponse::Ok().body("Hello world!"))
 }
 
 #[derive(Clone, Debug)]

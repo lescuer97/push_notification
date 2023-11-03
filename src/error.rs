@@ -27,6 +27,10 @@ pub enum CustomError {
     HyperError(#[from] hyper::Error),
     #[error("{0}")]
     FromUtf8Error(#[from] FromUtf8Error),
+    #[error("DB Error :{0}")]
+    DBError(#[from] r2d2_sqlite::rusqlite::Error),
+    #[error("DB Error :{0}")]
+    DBPoolError(#[from] r2d2::Error),
 }
 
 impl ResponseError for CustomError {
