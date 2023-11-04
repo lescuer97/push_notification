@@ -48,7 +48,7 @@ pub struct Subscription {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct SubscriptionBody {
     pub subscription_push: Subscription,
-    pub action_condition: Vec<String>,
+    pub action_condition: Vec<(String, bool)>,
 }
 
 pub async fn push_message_request(post: &Subscription, pool: &Pool) -> Result<(), CustomError> {

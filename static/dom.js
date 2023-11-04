@@ -25,12 +25,15 @@ export function getCheckedInputs(formId) {
     /** @type {NodeListOf<HTMLInputElement>} */
     let inputs = form.querySelectorAll("input");
     
+
     /** @type {string[]} */
     const activeNotifs = [];
 
     for (let input of Array.from(inputs)) {
         if (input.checked) {
-            activeNotifs.push(input.name);
+            activeNotifs.push([input.name, true]);
+        } else {
+            activeNotifs.push([input.name, false]);
         }
     }
     

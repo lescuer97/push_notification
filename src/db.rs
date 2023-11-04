@@ -6,22 +6,31 @@ use crate::{error::CustomError, Subscription, SubscriptionBody, SubscriptionOpti
 pub type Pool = r2d2::Pool<r2d2_sqlite::SqliteConnectionManager>;
 pub type Connection = r2d2::PooledConnection<r2d2_sqlite::SqliteConnectionManager>;
 
+/// Checks if the subscription already exists in the database. with the action_condition and endpoint.
 pub fn insert_subscription(pool: &Pool, subs: SubscriptionBody) -> Result<usize, CustomError> {
     let conn = pool.get()?;
 
-    let mut stmt = conn.prepare("
-                                INSERT INTO subscription (id, endpoint, auth_key, p256, expiration_time, subscribed, action_condition) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
-                                ")?;
+    let mut stmt = conn.prepare("INSERT INTO subscription (id, endpoint, auth_key, p256, expiration_time, subscribed, action_condition)
+                                    VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                                    ON CONFLICT (endpoint, action_condition)
+                                    DO UPDATE SET
+                                      subscribed = ?6;")?;
     for action in subs.action_condition.iter() {
         let subscription_id = Uuid::new_v4().to_string();
+
+        let mut subscribed = 0;
+        if action.1 {
+            subscribed = 1;
+        }
+         
         let result = stmt.execute((
             &subscription_id,
             &subs.subscription_push.endpoint,
             &subs.subscription_push.keys.auth,
             &subs.subscription_push.keys.p256dh,
             &subs.subscription_push.expirationTime,
-            1,
-            action,
+            subscribed,
+            &action.0,
         ))?;
     }
 
