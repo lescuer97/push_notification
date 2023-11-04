@@ -1,15 +1,3 @@
-// self.addEventListener('fetch', event => {
-//   event.respondWith(
-//     fetch(event.request)
-//       .then(response => {
-//         return response;
-//       })
-//       .catch(error => {
-//         console.error('Error fetching:', error);
-//       })
-//   );
-// });
-//
 self.addEventListener("activate", () => {
   console.log("activate");
   clients.claim();

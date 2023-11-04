@@ -28,6 +28,27 @@ pub fn insert_subscription(pool: &Pool, subs: SubscriptionBody) -> Result<usize,
     return Ok(0);
 }
 
+pub fn get_subscriptions_by_endpoint(
+    endpoint: &String,
+    pool: &Pool,
+) -> Result<Vec<String>, CustomError> {
+    let conn = pool.get()?;
+
+    let mut stmt = conn.prepare(
+        "SELECT action_condition  FROM subscription WHERE  endpoint = ?1 AND subscribed = 1",
+    )?;
+
+    let mut rows = stmt.query_map([endpoint], |row| Ok(row.get(0)?))?;
+
+    let mut subscriptions: Vec<String> = Vec::new();
+
+    for row in rows {
+        subscriptions.push(row?);
+    }
+
+    return Ok(subscriptions);
+}
+
 pub fn get_subscription_by_action_condition(
     pool: &Pool,
     action_condition: &String,

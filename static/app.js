@@ -1,4 +1,5 @@
-// if ('serviceWorker' in navigator) {
+import { changeDOMCheckboxValues, getCheckedInputs } from "./dom.js";
+
   navigator.serviceWorker.register('/static/worker.js')
     .then(registration => {
       console.log('Service Worker registered with scope:', registration.scope);
@@ -32,38 +33,29 @@ navigator.serviceWorker.ready.then(async function(registration) {
 
 }).then( async function(subscription) {
     subscriptionPush = subscription;
+    
+    let subs = await set_subscription();
+     
+    for (let index = 0; index < subs.length; index++) {
+        const element = subs[index];
+        changeDOMCheckboxValues(element);
+    }
     });
 });
 
 
-/** @type {HTMLInputElement} */
-let general_notif_input = document.querySelector("input[name='general_notif']");
 
-/** @type {HTMLInputElement} */
-let back_stock_input = document.querySelector("input[name='back_stock']");
-
-
-/** @type {HTMLButtonElement} */
+/** @type {HTMLFormElement} */
 let form = document.querySelector("form");
 
 form.addEventListener("submit", async function(event) {
     event.preventDefault();
-    const activeNotifs = [];
-
-    form.querySelectorAll("input").forEach(function(input) {
-        if (input.value === "on") {
-            activeNotifs.push(input.name);
-
-        }
-    });
-    console.log({activeNotifs});
-
     let result = await Notification.requestPermission();
+     
+    let checkedSubs = getCheckedInputs("notif-form");
 
-    console.log({subscriptionPush});
 
-    let res = await fetch('/subscribe', {method: 'POST', body: JSON.stringify({subscription_push: subscriptionPush, action_condition: activeNotifs}), headers: {'Content-Type': 'application/json'}});
-    console.log({res});
+    let res = await fetch('/subscribe', {method: 'POST', body: JSON.stringify({subscription_push: subscriptionPush, action_condition: checkedSubs}), headers: {'Content-Type': 'application/json'}});
 });
 
 let cancel = document.getElementById("unsubscribe");
@@ -71,14 +63,27 @@ let cancel = document.getElementById("unsubscribe");
 cancel.addEventListener("click", async function(event) {
     event.preventDefault();
 
-    subscriptionPush.unsubscribe().then(function(successful) { 
-        console.log({successful});
-    }).catch(function(e) {
+    let successful = await subscriptionPush.unsubscribe().catch(function(e) {
         console.log({e});
     });
 
+    console.log({successful});
+
 });
 
-     
-     
+
+/** 
+    * @async
+    * Get all subscriptions
+    * @returns { Promise<string[]>} */
+async function set_subscription() {
+    let res = await fetch(`/subscriptions?endpoint=${subscriptionPush.endpoint}`)
+      
+    if (res.ok) {
+        let subs = await res.json()
+        return subs;
+    }
+    
+    return [];
+}
 

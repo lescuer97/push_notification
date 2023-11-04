@@ -1,6 +1,9 @@
 use actix_files::NamedFile;
 use push_service::{
-    db::{get_subscription_by_action_condition, insert_subscription, Pool},
+    db::{
+        get_subscription_by_action_condition, get_subscriptions_by_endpoint, insert_subscription,
+        Pool,
+    },
     error::CustomError,
     load_rustls_config, lookup_keys, push_message_request, Subscription, SubscriptionBody,
     SubscriptionOptions,
@@ -55,6 +58,20 @@ async fn send_push(query: Query<PushQuery>, db: web::Data<Pool>) -> Result<impl 
     return Ok(HttpResponse::Ok().json("Hello world!"));
 }
 
+#[derive(Deserialize, Debug)]
+struct EndpointQuery {
+    endpoint: String,
+}
+#[get("/subscriptions")]
+async fn get_subscriptions(
+    query: Query<EndpointQuery>,
+    db: web::Data<Pool>,
+) -> Result<impl Responder, Error> {
+    let subs: Vec<String> = get_subscriptions_by_endpoint(&query.endpoint, &db)?;
+
+    return Ok(HttpResponse::Ok().json(subs));
+}
+
 /// Register a new public key subscription.
 #[post("/subscribe")]
 async fn subscribe(
@@ -107,6 +124,7 @@ async fn main() -> std::io::Result<()> {
             .service(subscribe)
             .service(get_public_key)
             .service(send_push)
+            .service(get_subscriptions)
             .route("/{filename:.*}", web::get().to(static_file))
     })
     .bind_rustls_021("127.0.0.1:3000", config)?
