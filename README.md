@@ -51,7 +51,4 @@ Right now the only two triggering actions available are: general_notif and back_
 
 ## TODO 
 
-- Improve database error handling, better check for repeated database.
-- Query if the browser has an available subscription with the server and correct the checkboxes.
-- Check if subscription is sent to the server and if it already exist in the case it those check the action type. 
-    if its an active subscription and do the correct action of disabling or not.
+
